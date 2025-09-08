@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 const formSchema = z.object({
   username: z.string().min(2).max(50),
 });
+type FormType = "sign-in" | "sign-up";
 
 const authFormSchema = (type: FormType) => {
   return z.object({
