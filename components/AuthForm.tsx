@@ -7,7 +7,7 @@ import { Form } from "@/components/ui/form";
 
 import Image from "next/image";
 
-import { email, z } from "zod";
+import { z } from "zod";
 import Link from "next/link";
 import { toast } from "sonner";
 import FormField from "./FormField";
@@ -22,6 +22,9 @@ import { signIn, signUp } from "@/lib/actions/auth.action";
 const formSchema = z.object({
   username: z.string().min(2).max(50),
 });
+
+// Define FormType type
+type FormType = "sign-in" | "sign-up";
 
 const authFormSchema = (type: FormType) => {
   return z.object({

@@ -1,6 +1,7 @@
 "use server";
 
 import { db, auth } from "@/firebase/admin";
+import { User } from "firebase/auth";
 import { cookies } from "next/headers";
 
 const ONE_WEEK = 60 * 60 * 24 * 7;
@@ -18,6 +19,12 @@ export async function setSessionCookie(idToken: string) {
     path: "/",
     sameSite: "lax",
   });
+}
+
+interface SignUpParams {
+  uid: string;
+  name: string;
+  email: string;
 }
 
 export async function signUp(params: SignUpParams) {
@@ -44,6 +51,7 @@ export async function signUp(params: SignUpParams) {
       success: true,
       message: "Account created successfully. Please sign in.",
     };
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   } catch (error: any) {
     console.error("Error creating user:", error);
 
@@ -62,6 +70,11 @@ export async function signUp(params: SignUpParams) {
   }
 }
 
+interface SignInParams {
+  email: string;
+  idToken: string;
+}
+
 export async function signIn(params: SignInParams) {
   const { email, idToken } = params;
 
@@ -78,7 +91,7 @@ export async function signIn(params: SignInParams) {
       success: true,
       message: "Signed in successfully",
     };
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.log("");
 
     return {
@@ -108,7 +121,7 @@ export async function getCurrentUser(): Promise<User | null> {
     return {
       ...userRecord.data(),
       id: userRecord.id,
-    } as User;
+    } as unknown as User;
   } catch (e) {
     console.log(e);
 
