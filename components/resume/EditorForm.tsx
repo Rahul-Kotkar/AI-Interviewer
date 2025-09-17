@@ -1,47 +1,23 @@
 "use client";
 
-// The interface can be simplified as the formatting function will handle the structure
+// New interfaces to match the dynamic structure
+interface Section {
+  title: string;
+  content: string;
+}
+
 interface ResumeData {
   name: string;
   role: string;
-  skills: any;
-  technologies: any;
-  experienceSummary: any;
-  projects: any;
+  sections: Section[];
 }
 
 interface EditorFormProps {
   resumeData: ResumeData;
-  handleDataChange: (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => void;
+  // The data change handler now needs to know which section is being edited
+  handleDataChange: (field: "name" | "role" | number, value: string) => void;
   handleStartInterview: () => void;
 }
-
-// --- NEW ROBUST HELPER FUNCTION ---
-// This function is now designed to handle any object structure from the AI.
-const formatValueForDisplay = (value: unknown): string => {
-  if (typeof value === "string") {
-    return value;
-  }
-  if (Array.isArray(value)) {
-    return (
-      value
-        .map((item) => {
-          // If the item in the array is an object, join its values.
-          if (typeof item === "object" && item !== null) {
-            // e.g., for { title: "AI Bot", desc: "..." }, this becomes "AI Bot - ..."
-            return Object.values(item).join(" - ");
-          }
-          // If it's just a string in an array (like for skills).
-          return String(item);
-        })
-        // Separate each project or item with a new line for better readability.
-        .join("\n")
-    );
-  }
-  return "";
-};
 
 export default function EditorForm({
   resumeData,
@@ -57,86 +33,56 @@ export default function EditorForm({
       <h2 className="text-2xl font-bold text-white mb-6">
         Verify Your Details
       </h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div>
-          <label htmlFor="name" className={labelStyle}>
-            Full Name
-          </label>
-          <input
-            type="text"
-            id="name"
-            name="name"
-            value={formatValueForDisplay(resumeData.name)}
-            onChange={handleDataChange}
-            className={inputStyle}
-          />
+      <div className="space-y-6">
+        {/* Static fields for Name and Role */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label htmlFor="name" className={labelStyle}>
+              Full Name
+            </label>
+            <input
+              type="text"
+              id="name"
+              name="name"
+              value={resumeData.name}
+              onChange={(e) => handleDataChange("name", e.target.value)}
+              className={inputStyle}
+            />
+          </div>
+          <div>
+            <label htmlFor="role" className={labelStyle}>
+              Current Role / Title
+            </label>
+            <input
+              type="text"
+              id="role"
+              name="role"
+              value={resumeData.role}
+              onChange={(e) => handleDataChange("role", e.target.value)}
+              className={inputStyle}
+            />
+          </div>
         </div>
-        <div>
-          <label htmlFor="role" className={labelStyle}>
-            Current Role / Title
-          </label>
-          <input
-            type="text"
-            id="role"
-            name="role"
-            value={formatValueForDisplay(resumeData.role)}
-            onChange={handleDataChange}
-            className={inputStyle}
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label htmlFor="skills" className={labelStyle}>
-            Skills
-          </label>
-          <textarea
-            id="skills"
-            name="skills"
-            value={formatValueForDisplay(resumeData.skills)}
-            onChange={handleDataChange}
-            className={inputStyle}
-            rows={3}
-          ></textarea>
-        </div>
-        <div className="md:col-span-2">
-          <label htmlFor="technologies" className={labelStyle}>
-            Technologies & Tools
-          </label>
-          <textarea
-            id="technologies"
-            name="technologies"
-            value={formatValueForDisplay(resumeData.technologies)}
-            onChange={handleDataChange}
-            className={inputStyle}
-            rows={3}
-          ></textarea>
-        </div>
-        <div className="md:col-span-2">
-          <label htmlFor="experienceSummary" className={labelStyle}>
-            Experience Summary
-          </label>
-          <textarea
-            id="experienceSummary"
-            name="experienceSummary"
-            value={formatValueForDisplay(resumeData.experienceSummary)}
-            onChange={handleDataChange}
-            className={inputStyle}
-            rows={4}
-          ></textarea>
-        </div>
-        <div className="md:col-span-2">
-          <label htmlFor="projects" className={labelStyle}>
-            Key Projects
-          </label>
-          <textarea
-            id="projects"
-            name="projects"
-            value={formatValueForDisplay(resumeData.projects)}
-            onChange={handleDataChange}
-            className={inputStyle}
-            rows={4}
-          ></textarea>
-        </div>
+
+        {/* Dynamic sections are generated here */}
+        {resumeData.sections.map((section, index) => (
+          <div key={index}>
+            {/* The section title is a non-editable heading */}
+            <h3 className="text-lg font-semibold text-gray-200 mb-2">
+              {section.title}
+            </h3>
+            {/* The section content is an editable textarea */}
+            <textarea
+              name={`section-${index}`}
+              value={section.content}
+              onChange={(e) => handleDataChange(index, e.target.value)}
+              className={inputStyle}
+              rows={4}
+            ></textarea>
+          </div>
+        ))}
       </div>
+
       <div className="mt-8">
         <button
           onClick={handleStartInterview}

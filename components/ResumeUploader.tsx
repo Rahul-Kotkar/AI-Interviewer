@@ -2,22 +2,24 @@
 
 import { useState, useRef, useEffect } from "react";
 import Tesseract from "tesseract.js";
-import UploaderSection from "./resume/UploaderSection";
-import EditorForm from "./resume/EditorForm";
-import StatusMessages from "./resume/StatusMessages";
+import UploaderSection from "@/components/resume/UploaderSection";
+import EditorForm from "@/components/resume/EditorForm";
+import StatusMessages from "@/components/resume/StatusMessages";
 
-// Data Structure
+// New interfaces to match the dynamic structure
+interface Section {
+  title: string;
+  content: string;
+}
+
 interface ResumeData {
   name: string;
   role: string;
-  skills: string;
-  technologies: string;
-  experienceSummary: string;
-  projects: string;
+  sections: Section[];
 }
 
 export default function ResumePage() {
-  // --- ALL STATE AND LOGIC REMAINS HERE, UNCHANGED ---
+  // --- STATE AND LOGIC SECTION ---
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingStatus, setLoadingStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -26,6 +28,7 @@ export default function ResumePage() {
   const [fileName, setFileName] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState(false);
 
+  // Unchanged logic...
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === "pdf-result") {
@@ -49,13 +52,11 @@ export default function ResumePage() {
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsLoading(true);
     setLoadingStatus("Extracting text...");
     setError("");
     setResumeData(null);
     setFileName(file.name);
-
     try {
       if (file.type === "application/pdf") {
         const reader = new FileReader();
@@ -102,11 +103,19 @@ export default function ResumePage() {
     }
   };
 
-  const handleDataChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
+  // --- UPDATED DATA CHANGE HANDLER ---
+  const handleDataChange = (field: "name" | "role" | number, value: string) => {
     if (!resumeData) return;
-    setResumeData({ ...resumeData, [e.target.name]: e.target.value });
+
+    if (field === "name" || field === "role") {
+      // Handle changes to top-level fields like name and role
+      setResumeData({ ...resumeData, [field]: value });
+    } else {
+      // Handle changes to a specific section's content
+      const newSections = [...resumeData.sections];
+      newSections[field].content = value;
+      setResumeData({ ...resumeData, sections: newSections });
+    }
   };
 
   const handleStartInterview = () => {
@@ -119,11 +128,9 @@ export default function ResumePage() {
     if (e.type === "dragenter" || e.type === "dragover") setIsDragActive(true);
     else if (e.type === "dragleave") setIsDragActive(false);
   };
-
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragActive(false);
     if (e.dataTransfer.files?.[0]) {
       const syntheticEvent = {
         target: { files: e.dataTransfer.files },
