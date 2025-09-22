@@ -2,11 +2,13 @@
 
 import { useState, useRef, useEffect } from "react";
 import Tesseract from "tesseract.js";
+import { useRouter } from "next/navigation";
+import { useInterviewStore } from "@/app/store/interviewStore"; // Make sure this path is correct
 import UploaderSection from "@/components/resume/UploaderSection";
 import EditorForm from "@/components/resume/EditorForm";
 import StatusMessages from "@/components/resume/StatusMessages";
 
-// New interfaces to match the dynamic structure
+// Interfaces to define the data structure
 interface Section {
   title: string;
   content: string;
@@ -18,8 +20,15 @@ interface ResumeData {
   sections: Section[];
 }
 
-export default function ResumePage() {
-  // --- STATE AND LOGIC SECTION ---
+// NOTE: Changed component name to match your file name
+export default function ResumeUploader() {
+  // --- ADDED HOOKS for navigation and state management ---
+  const router = useRouter();
+  const { setResumeData: setGlobalResumeData, generateInterview } =
+    useInterviewStore();
+  const [isGenerating, setIsGenerating] = useState<boolean>(false);
+
+  // --- YOUR ORIGINAL STATE (UNCHANGED) ---
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [loadingStatus, setLoadingStatus] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -28,7 +37,7 @@ export default function ResumePage() {
   const [fileName, setFileName] = useState<string>("");
   const [isDragActive, setIsDragActive] = useState(false);
 
-  // Unchanged logic...
+  // --- YOUR ORIGINAL LOGIC (UNCHANGED) ---
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
       if (event.data.type === "pdf-result") {
@@ -82,6 +91,7 @@ export default function ResumePage() {
     }
   };
 
+  // --- LOGIC WITH ONE LINE ADDED TO CONNECT TO STORE ---
   const parseTextWithAI = async (text: string) => {
     setLoadingStatus("AI is analyzing details...");
     try {
@@ -95,6 +105,7 @@ export default function ResumePage() {
       }
       const data: ResumeData = await response.json();
       setResumeData(data);
+      setGlobalResumeData(data); // Also save to our global store
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -103,25 +114,35 @@ export default function ResumePage() {
     }
   };
 
-  // --- UPDATED DATA CHANGE HANDLER ---
+  // --- LOGIC WITH ONE LINE ADDED TO CONNECT TO STORE ---
   const handleDataChange = (field: "name" | "role" | number, value: string) => {
     if (!resumeData) return;
-
+    let newData;
     if (field === "name" || field === "role") {
-      // Handle changes to top-level fields like name and role
-      setResumeData({ ...resumeData, [field]: value });
+      newData = { ...resumeData, [field]: value };
     } else {
-      // Handle changes to a specific section's content
       const newSections = [...resumeData.sections];
       newSections[field].content = value;
-      setResumeData({ ...resumeData, sections: newSections });
+      newData = { ...resumeData, sections: newSections };
+    }
+    setResumeData(newData);
+    setGlobalResumeData(newData); // Keep global store in sync
+  };
+
+  // --- REPLACED a console.log WITH REAL NAVIGATION LOGIC ---
+  const handleStartInterview = async () => {
+    setIsGenerating(true);
+    setError("");
+    try {
+      await generateInterview(); // This calls the API via the store
+      router.push("/session"); // This navigates to the interview page
+    } catch (err: any) {
+      setError(err.message);
+      setIsGenerating(false);
     }
   };
 
-  const handleStartInterview = () => {
-    console.log("Starting interview with:", resumeData);
-  };
-
+  // --- YOUR ORIGINAL DRAG/DROP LOGIC (UNCHANGED) ---
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -138,7 +159,6 @@ export default function ResumePage() {
       handleFileChange(syntheticEvent);
     }
   };
-  // --- END OF LOGIC SECTION ---
 
   return (
     <div className="bg-[#121212] min-h-screen flex items-center justify-center p-4 sm:p-6 lg:p-8 font-sans">
@@ -151,7 +171,6 @@ export default function ResumePage() {
             Upload your resume to start a personalized interview session.
           </p>
         </div>
-
         <div className="bg-[#1F2937] rounded-xl shadow-lg p-6 sm:p-8 space-y-8">
           <UploaderSection
             fileName={fileName}
@@ -162,18 +181,19 @@ export default function ResumePage() {
             handleDrop={handleDrop}
             handleFileChange={handleFileChange}
           />
-
           <StatusMessages
-            isLoading={isLoading}
-            loadingStatus={loadingStatus}
+            isLoading={isLoading || isGenerating}
+            loadingStatus={
+              loadingStatus || (isGenerating ? "Preparing Interview..." : "")
+            }
             error={error}
           />
-
           {resumeData && !isLoading && (
             <EditorForm
               resumeData={resumeData}
               handleDataChange={handleDataChange}
               handleStartInterview={handleStartInterview}
+              isGenerating={isGenerating} // This prop needs to be added to EditorForm
             />
           )}
         </div>
