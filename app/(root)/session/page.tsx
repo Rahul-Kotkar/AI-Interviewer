@@ -7,14 +7,20 @@ import InterviewHeader from "@/components/session/InterviewHeader";
 import SpeakerPanel from "@/components/session/SpeakerPanel";
 import ControlButtons from "@/components/session/ControlButtons";
 
-// --- PLACEHOLDER DATA FOR DIRECT TESTING/RELOADING ---
 const MOCK_DATA = {
   interviewTitle: "Test Interview (Dev Mode)",
   interviewCategory: "Technical",
   questionOutline: [
-    "First test question: Tell me about a project you're proud of.",
-    "Second test question: What is a closure in JavaScript?",
-    "Third test question: How would you handle a disagreement with a coworker?",
+    "To get started, could you briefly introduce yourself and share what motivated you to become a software developer?",
+    "Thanks for that. You mentioned your motivation — can you walk me through one project that you’re most proud of, and what your specific contribution was?",
+    "That’s interesting. What kind of challenges did you face during that project, and how did you overcome them?",
+    "Since that project involved teamwork, how do you usually collaborate with teammates, especially when opinions differ?",
+    "Good. Let’s talk about technical skills — can you explain in simple terms what a closure is in JavaScript, and why it might be useful?",
+    "Nice explanation. Now imagine you’re working on a large codebase — how would you ensure your code remains clean, readable, and maintainable?",
+    "Speaking of scale, have you ever optimized an application for performance? What strategies did you use?",
+    "Let’s shift a bit — how do you usually approach learning a new technology or framework?",
+    "Great. Suppose your manager suddenly changes the project requirements close to the deadline. How would you handle that situation?",
+    "Finally, what are your long-term career goals as a software developer, and how do you see yourself growing in this role?",
   ],
   resumeData: {
     name: "Test User",
@@ -23,20 +29,14 @@ const MOCK_DATA = {
   },
 };
 
-const MicIcon = () => (
-  <svg
-    className="w-8 h-8"
-    fill="currentColor"
-    viewBox="0 0 24 24"
-    xmlns="http://www.w3.org/2000/svg"
-  >
-    <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"></path>
-  </svg>
-);
-
 interface TranscriptItem {
   speaker: "AI" | "User";
   text: string;
+}
+
+interface QAItem {
+  question: string;
+  answer: string;
 }
 
 export default function SessionPage() {
@@ -59,30 +59,29 @@ export default function SessionPage() {
   const resumeData = isStoreEmpty ? MOCK_DATA.resumeData : realResumeData;
 
   const [transcript, setTranscript] = useState<TranscriptItem[]>([]);
+  const [qaData, setQaData] = useState<QAItem[]>([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [userAnswer, setUserAnswer] = useState("");
   const [remainingQuestions, setRemainingQuestions] = useState<string[]>([]);
+  const [currentQuestion, setCurrentQuestion] = useState<string | null>(null);
   const [isStarted, setIsStarted] = useState(false);
   const [voicesLoaded, setVoicesLoaded] = useState(false);
+
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const latestAnswerRef = useRef("");
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isProcessingRef = useRef(false); // Prevent duplicate answer processing
 
   // --- LOAD VOICES ---
   useEffect(() => {
     if (typeof window === "undefined" || !window.speechSynthesis) return;
     const loadVoices = () => {
       const voices = window.speechSynthesis.getVoices();
-      console.log("Available voices:", voices); // Debug voices
       if (voices.length > 0) {
         setVoicesLoaded(true);
       } else {
         window.speechSynthesis.onvoiceschanged = () => {
-          const updatedVoices = window.speechSynthesis.getVoices();
-          console.log("Voices changed:", updatedVoices); // Debug voices
-          if (updatedVoices.length > 0) {
+          if (window.speechSynthesis.getVoices().length > 0) {
             setVoicesLoaded(true);
             window.speechSynthesis.onvoiceschanged = null;
           }
@@ -90,258 +89,135 @@ export default function SessionPage() {
       }
     };
     loadVoices();
-    return () => {
-      window.speechSynthesis.onvoiceschanged = null;
-    };
   }, []);
 
-  // --- SPEAK: Enhanced with delay, retry, and voice check ---
+  // --- SPEAK ---
   const speak = useCallback(
-    (text: string, retryCount = 0) => {
-      if (typeof window === "undefined" || !window.speechSynthesis) {
-        console.warn("SpeechSynthesis not supported");
+    (text: string) => {
+      if (typeof window === "undefined" || !window.speechSynthesis) return;
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+
+      utterance.onstart = () => {
+        stopListening();
+        setIsSpeaking(true);
+      };
+
+      utterance.onend = () => {
         setIsSpeaking(false);
-        handleListen(); // Proceed to maintain flow
-        return;
+        setTimeout(() => handleListen(), 500);
+      };
+
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        utterance.voice =
+          voices.find((v) => v.lang.includes("en")) || voices[0];
       }
-      if (!voicesLoaded) {
-        console.warn("Voices not loaded, retrying...");
-        if (retryCount < 3) {
-          setTimeout(() => speak(text, retryCount + 1), 1000);
-        } else {
-          console.error("No voices available after retries, skipping speech");
-          setIsSpeaking(false);
-          handleListen();
-        }
-        return;
-      }
-      // Add delay to avoid rapid cancel/speak
-      setTimeout(() => {
-        window.speechSynthesis.cancel();
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.onerror = (err) => {
-          console.error(
-            "Speech error:",
-            err,
-            "Text:",
-            text,
-            "Retry:",
-            retryCount
-          );
-          setIsSpeaking(false);
-          if (retryCount < 3) {
-            console.warn("Retrying speech, attempt:", retryCount + 1);
-            setTimeout(() => speak(text, retryCount + 1), 1000);
-          } else {
-            console.error("Speech failed after retries, skipping");
-            handleListen();
-          }
-        };
-        utterance.onstart = () => {
-          stopListening();
-          setIsSpeaking(true);
-        };
-        utterance.onend = () => {
-          setIsSpeaking(false);
-          setTimeout(() => handleListen(), 500); // Delay mic start to avoid echo on Edge
-        };
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length > 0) {
-          utterance.voice =
-            voices.find((v) => v.lang.includes("en")) || voices[0]; // Prefer English voice
-          console.log("Using voice:", utterance.voice); // Debug selected voice
-        }
-        window.speechSynthesis.speak(utterance);
-      }, 100); // Small delay to stabilize
+      window.speechSynthesis.speak(utterance);
     },
     [voicesLoaded]
   );
 
-  // --- USER ANSWER HANDLING ---
+  // --- HANDLE USER ANSWER ---
   const handleUserAnswer = useCallback(
-    async (answer: string) => {
-      if (isProcessingRef.current) {
-        console.log("Skipping duplicate answer processing:", answer); // Debug
-        return;
-      }
-      isProcessingRef.current = true;
-      console.log("Sending to API:", answer); // Debug
+    (answer: string) => {
+      if (!currentQuestion) return;
       setTranscript((prev) => [...prev, { speaker: "User", text: answer }]);
+      setQaData((prev) => [...prev, { question: currentQuestion, answer }]);
 
-      try {
-        const res = await fetch("/api/process-answer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            conversationHistory: [
-              ...transcript,
-              { speaker: "User", text: answer },
-            ],
-            userAnswer: answer,
-            remainingQuestions,
-          }),
-        });
-
-        const data = await res.json();
-
-        if (!data || data.error) {
-          throw new Error(data?.error || "Invalid AI response");
-        }
-
-        const aiResponse = data.next_question_text;
-        console.log("Received API response:", aiResponse); // Debug
-        setTranscript((prev) => [...prev, { speaker: "AI", text: aiResponse }]);
-        speak(aiResponse);
-
-        if (data.decision === "next-question") {
-          setRemainingQuestions((prev) => prev.slice(1));
-        }
-      } catch (err) {
-        console.error("Error processing answer:", err);
-        const fallback = "Sorry, something went wrong. Let's move on.";
-        setTranscript((prev) => [...prev, { speaker: "AI", text: fallback }]);
-        speak(fallback);
+      if (remainingQuestions.length > 0) {
+        const nextQ = remainingQuestions[0];
+        setCurrentQuestion(nextQ);
         setRemainingQuestions((prev) => prev.slice(1));
-      } finally {
-        isProcessingRef.current = false; // Reset to allow next answer
+        setTranscript((prev) => [...prev, { speaker: "AI", text: nextQ }]);
+        speak(nextQ);
+      } else {
+        // ✅ Save final data before redirect
+        try {
+          localStorage.setItem(
+            "qaData",
+            JSON.stringify([...qaData, { question: currentQuestion, answer }])
+          );
+        } catch (err) {
+          console.error("Failed to save qaData:", err);
+        }
+        router.push("/feedback");
       }
     },
-    [remainingQuestions, speak, transcript]
+    [currentQuestion, remainingQuestions, speak, router, qaData]
   );
 
-  // --- LISTENING CONTROLS ---
+  // --- LISTENING ---
   const handleListen = () => {
-    if (isSpeaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    }
-    if (recognitionRef.current) {
-      if (isListening) {
-        console.log("Aborting existing recognition before start"); // Debug
-        recognitionRef.current.abort(); // Ensure stopped to avoid InvalidStateError
-      }
-      setTimeout(() => {
-        console.log("Starting speech recognition"); // Debug
-        try {
-          recognitionRef.current.start();
-        } catch (err) {
-          console.error("Failed to start recognition:", err); // Debug
-        }
-      }, 100); // Small delay for Edge stability
-    }
+    if (!recognitionRef.current) return;
+    try {
+      recognitionRef.current.start();
+    } catch {}
   };
 
   const stopListening = () => {
-    if (isListening && recognitionRef.current) {
-      console.log("stoplisten is called"); // Debug
+    if (recognitionRef.current) {
       recognitionRef.current.stop();
-      recognitionRef.current.abort(); // Immediate abort to force onend
+      recognitionRef.current.abort();
       setIsListening(false);
       if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
     }
   };
 
-  // --- SETUP RECOGNITION ---
+  // --- INIT RECOGNITION ---
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const SpeechRecognition =
-        window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (SpeechRecognition) {
-        recognitionRef.current = new SpeechRecognition();
-        recognitionRef.current.continuous = true;
-        recognitionRef.current.interimResults = true;
-        recognitionRef.current.lang = "en-US";
+    if (typeof window === "undefined") return;
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
 
-        recognitionRef.current.onstart = () => {
-          console.log("Recognition started"); // Debug
-          setIsListening(true);
-        };
+    recognitionRef.current = new SpeechRecognition();
+    recognitionRef.current.continuous = true;
+    recognitionRef.current.interimResults = true;
+    recognitionRef.current.lang = "en-US";
 
-        recognitionRef.current.onend = () => {
-          console.log(
-            "Recognition onend triggered, answer:",
-            latestAnswerRef.current
-          ); // Debug
-          setIsListening(false);
-          if (latestAnswerRef.current.trim()) {
-            console.log("Processing answer in onend:", latestAnswerRef.current); // Debug
-            handleUserAnswer(latestAnswerRef.current.trim());
-            latestAnswerRef.current = "";
-            setUserAnswer("");
-          }
-          // No auto-restart; handled by speak's onend to avoid echo
-        };
+    recognitionRef.current.onstart = () => setIsListening(true);
 
-        recognitionRef.current.onresult = (event) => {
-          console.log("Recognition result received"); // Debug
-          let fullTranscript = "";
-          for (let i = 0; i < event.results.length; i++) {
-            fullTranscript += event.results[i][0].transcript + " ";
-          }
-          const trimmedTranscript = fullTranscript.trim();
-          if (trimmedTranscript) {
-            setUserAnswer(trimmedTranscript);
-            latestAnswerRef.current = trimmedTranscript;
-            console.log("Current transcript:", trimmedTranscript); // Debug
-            if (silenceTimeoutRef.current)
-              clearTimeout(silenceTimeoutRef.current);
-            silenceTimeoutRef.current = setTimeout(() => {
-              console.log("Silence detected, stopping recognition"); // Debug
-              stopListening();
-            }, 3000); // 3s for Edge reliability
-          }
-        };
-
-        recognitionRef.current.onerror = (event) => {
-          console.error("Recognition error:", event.error || event); // Log specific error
-          setIsListening(false);
-          if (silenceTimeoutRef.current)
-            clearTimeout(silenceTimeoutRef.current);
-          if (event.error === "no-speech" || !event.error) {
-            console.log(
-              "No-speech or empty error, processing if answer exists"
-            ); // Debug
-            if (latestAnswerRef.current.trim()) {
-              console.log(
-                "Processing answer in onerror:",
-                latestAnswerRef.current
-              ); // Debug
-              handleUserAnswer(latestAnswerRef.current.trim());
-              latestAnswerRef.current = "";
-              setUserAnswer("");
-            }
-            if (!isSpeaking) {
-              console.log("Restarting recognition after no-speech"); // Debug
-              setTimeout(() => handleListen(), 500); // Delay for Edge stability
-            }
-          } else {
-            console.log("Aborting recognition on error:", event.error); // Debug
-            recognitionRef.current.abort();
-          }
-        };
-      } else {
-        console.error("SpeechRecognition not supported");
+    recognitionRef.current.onend = () => {
+      setIsListening(false);
+      if (latestAnswerRef.current.trim()) {
+        handleUserAnswer(latestAnswerRef.current.trim());
+        latestAnswerRef.current = "";
+        setUserAnswer("");
       }
-    }
+    };
 
-    return () => {
-      if (recognitionRef.current) recognitionRef.current.abort();
-      window.speechSynthesis.cancel();
-      if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+    recognitionRef.current.onresult = (event: any) => {
+      let fullTranscript = "";
+      for (let i = 0; i < event.results.length; i++) {
+        fullTranscript += event.results[i][0].transcript + " ";
+      }
+      const trimmed = fullTranscript.trim();
+      if (trimmed) {
+        setUserAnswer(trimmed);
+        latestAnswerRef.current = trimmed;
+        if (silenceTimeoutRef.current) clearTimeout(silenceTimeoutRef.current);
+        silenceTimeoutRef.current = setTimeout(() => {
+          stopListening();
+        }, 2000);
+      }
     };
   }, [handleUserAnswer]);
 
-  // --- INIT INTERVIEW ---
+  // --- START INTERVIEW ---
   useEffect(() => {
     if (!isStarted) return;
     if (!questionOutline || questionOutline.length === 0) {
       if (!isStoreEmpty) router.push("/");
       return;
     }
-
-    const firstQuestion = questionOutline[0];
+    const firstQ = questionOutline[0];
+    setCurrentQuestion(firstQ);
     setRemainingQuestions(questionOutline.slice(1));
-    const greeting = `Hello ${resumeData?.name}, welcome to your ${interviewTitle}. Let's begin. ${firstQuestion}`;
+    const greeting = `Hello ${
+      resumeData?.name || "Candidate"
+    }, welcome to your ${interviewTitle}. Let's begin. ${firstQ}`;
     setTranscript([{ speaker: "AI", text: greeting }]);
     speak(greeting);
   }, [
@@ -354,24 +230,8 @@ export default function SessionPage() {
     speak,
   ]);
 
-  const getCurrentAiMessage = () => {
-    const aiMessages = transcript.filter((item) => item.speaker === "AI");
-    return aiMessages[aiMessages.length - 1]?.text || "Preparing interview...";
-  };
-
-  const handleRepeat = () => {
-    if (isSpeaking) return;
-    speak(getCurrentAiMessage());
-  };
-
-  const handleLeave = () => {
-    if (recognitionRef.current) recognitionRef.current.abort();
-    window.speechSynthesis.cancel();
-    router.push("/feedback");
-  };
-
   return (
-    <div className="bg-[#121212] text-white min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 font-sans">
+    <div className="bg-[#121212] text-white min-h-screen flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-4xl">
         {!isStarted ? (
           <button
@@ -383,14 +243,12 @@ export default function SessionPage() {
         ) : (
           <>
             <InterviewHeader />
-
             <div className="w-full mb-8">
               <h1 className="text-3xl font-bold">{interviewTitle}</h1>
-              <span className="bg-gray-700 text-sm font-medium px-3 py-1 rounded-full mt-2 inline-block">
+              <span className="bg-gray-700 text-sm px-3 py-1 rounded-full mt-2 inline-block">
                 {interviewCategory}
               </span>
             </div>
-
             <main className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
               <SpeakerPanel
                 type="AI"
@@ -403,18 +261,25 @@ export default function SessionPage() {
                 isActive={isListening}
               />
             </main>
-
             <section className="bg-[#1F2937] p-6 rounded-2xl text-center mb-6 min-h-[80px] flex items-center justify-center">
               <p className="text-xl text-gray-300">
-                {isListening ? userAnswer || "..." : getCurrentAiMessage()}
+                {isListening
+                  ? userAnswer || "..."
+                  : transcript[transcript.length - 1]?.text}
               </p>
             </section>
-
             <ControlButtons
               isSpeaking={isSpeaking}
               isListening={isListening}
-              handleRepeat={handleRepeat}
-              handleLeave={handleLeave}
+              handleRepeat={() =>
+                speak(transcript[transcript.length - 1]?.text || "")
+              }
+              handleLeave={() => {
+                try {
+                  localStorage.setItem("qaData", JSON.stringify(qaData));
+                } catch {}
+                router.push("/feedback");
+              }}
               handleListen={handleListen}
               stopListening={stopListening}
               disableMic={isSpeaking || isListening}
